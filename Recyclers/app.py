@@ -9,14 +9,14 @@ st.title("🤖 My Chatbot")
 
 SYSTEM_PROMPT = "You are a helpful and friendly chatbot assistant."
 
-MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+MODELS = ["gemini-3.5-flash-lite"]
 
 def generate_with_retry(client, contents, config, status, retries=2):
     last_error = None
     for model in MODELS:
         for attempt in range(retries):
             try:
-                status.update(label=f"Trying {model} (attempt {attempt + 1})...")
+                status.update(label=f"Trying")
                 return client.models.generate_content(
                     model=model,
                     contents=contents,
