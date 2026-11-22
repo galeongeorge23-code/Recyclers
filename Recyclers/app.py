@@ -11,16 +11,26 @@ SYSTEM_PROMPT = "You are a helpful and friendly chatbot assistant."
 MODELS = ["gemini-3.8-flash", "gemini-3.8-flash-lite"]  # primary, then fallback
 
 
-def generate_with_retry(client, contents, config, retries=3):
+def generate_with_retry(client, contents, config, status, retries=2):
+    last_error = None
     for model in MODELS:
         for attempt in range(retries):
             try:
+                status.update(label=f"Trying {model} (attempt {attempt + 1})...")
                 return client.models.generate_content(
                     model=model, contents=contents, config=config
                 )
-            except errors.ServerError:  # 5xx errors like 503
-                time.sleep(2 ** attempt)  # wait 1s, 2s, 4s
-    raise RuntimeError("Gemini is busy right now. Please try again in a minute.")
+            except errors.ServerError as e:  # 5xx, e.g. 503
+                last_error = e
+                if attempt < retries - 1:
+                    time.sleep(2)
+            except errors.ClientError as e:  # 4xx, e.g. 404 bad model, 429 rate limit
+                last_error = e
+                break  # retrying won't help; move to the next model
+            except Exception as e:  # timeouts, network problems
+                last_error = e
+                break
+    raise RuntimeError(f"All models failed. Last error: {last_error}")
 
 
 # Key from sidebar, falling back to an environment variable if set
@@ -30,7 +40,10 @@ if not api_key:
     st.warning("Please paste your Gemini API Key in the sidebar to start chatting.")
     st.stop()
 
-client = genai.Client(api_key=api_key)
+client = genai.Client(
+    api_key=api_key,
+    http_options=types.HttpOptions(timeout=30000),  # 30 seconds, in milliseconds
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -54,7 +67,7 @@ if prompt := st.chat_input("Ask me anything..."):
     ]
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.status("Thinking...", expanded=False) as status:
             try:
                 response = generate_with_retry(
                     client,
@@ -64,11 +77,14 @@ if prompt := st.chat_input("Ask me anything..."):
                         temperature=0.7,
                         max_output_tokens=1000,
                     ),
+                    status,
                 )
+                status.update(label="Done", state="complete")
                 reply = response.text
                 st.write(reply)
                 st.session_state.messages.append({"role": "assistant", "content": reply})
             except Exception as e:
+                status.update(label="Failed", state="error")
                 st.error(f"Error: {e}")
 
 if st.sidebar.button("Clear Chat"):
