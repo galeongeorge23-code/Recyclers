@@ -72,3 +72,21 @@ if prompt := st.chat_input("Ask me anything..."):
                 response = generate_with_retry(
                     client,
                     contents,
+                    types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        temperature=0.7,
+                        max_output_tokens=1000,
+                    ),
+                    status,
+                )
+                status.update(label="Done", state="complete")
+                reply = response.text
+                st.write(reply)
+                st.session_state.messages.append({"role": "assistant", "content": reply})
+            except Exception as e:
+                status.update(label="Failed", state="error")
+                st.error(f"Error: {e}")
+
+if st.sidebar.button("Clear Chat"):
+    st.session_state.messages = []
+    st.rerun()
