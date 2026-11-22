@@ -40,7 +40,10 @@ if not api_key:
     st.warning("Please paste your Gemini API Key in the sidebar to start chatting.")
     st.stop()
 
-client = genai.Client(api_key=api_key)
+client = genai.Client(
+    api_key=api_key,
+    http_options=types.HttpOptions(timeout=30000),  # 30 seconds, in milliseconds
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -64,23 +67,8 @@ if prompt := st.chat_input("Ask me anything..."):
     ]
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.status("Thinking...", expanded=False) as status:
             try:
                 response = generate_with_retry(
                     client,
                     contents,
-                    types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        temperature=0.7,
-                        max_output_tokens=1000,
-                    ),
-                )
-                reply = response.text
-                st.write(reply)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-if st.sidebar.button("Clear Chat"):
-    st.session_state.messages = []
-    st.rerun()
