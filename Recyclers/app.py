@@ -40,22 +40,18 @@ if prompt := st.chat_input("Ask me anything..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            try:
-                response = client.models.generate_content(
-                    model="gemini-3.8-flash",
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        temperature=0.7,
-                        max_output_tokens=500,
-                    ),
-                )
-                reply = response.text
-                st.write(reply)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-            except Exception as e:
-                st.error(f"Error: {e}")
+            import time
+from google.genai import errors
 
-if st.sidebar.button("Clear Chat"):
-    st.session_state.messages = []
-    st.rerun()
+MODELS = ["gemini-3.8-flash", "gemini-3.8-flash-lite"]  # primary, then fallback
+
+def generate_with_retry(client, contents, config, retries=3):
+    for model in MODELS:
+        for attempt in range(retries):
+            try:
+                return client.models.generate_content(
+                    model=model, contents=contents, config=config
+                )
+            except errors.ServerError:  # 5xx errors like 503
+                time.sleep(2 ** attempt)  # wait 1s, 2s, 4s
+    raise RuntimeError("Gemini is busy right now. Please try again in a minute.")
